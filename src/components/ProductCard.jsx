@@ -2,7 +2,7 @@ import { formatCurrency } from '../data/handbags'
 
 function ProductCard({ bag, onAddToCart }) {
   return (
-    <article className="product-card" key={bag.id}>
+    <article className="product-card">
       <p className="product-category">{bag.category}</p>
       <h2>{bag.name}</h2>
       <p>{bag.description}</p>
