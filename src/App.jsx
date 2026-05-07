@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import './App.css'
 
+const SHIPPING_COST = 12
+
 const handbags = [
   {
     id: 1,
@@ -57,7 +59,7 @@ function App() {
     [cart, cartItems],
   )
 
-  const shipping = subtotal > 0 ? 12 : 0
+  const shipping = subtotal > 0 ? SHIPPING_COST : 0
   const total = subtotal + shipping
 
   return (
