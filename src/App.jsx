@@ -59,7 +59,7 @@ function App() {
     [cart, cartItems],
   )
 
-  const shipping = subtotal > 0 ? SHIPPING_COST : 0
+  const shipping = cartItems.length > 0 ? SHIPPING_COST : 0
   const total = subtotal + shipping
 
   return (
