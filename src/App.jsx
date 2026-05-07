@@ -1,121 +1,133 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
+import { useMemo, useState } from 'react'
 import './App.css'
 
+const handbags = [
+  {
+    id: 1,
+    name: 'Pearl Mini Tote',
+    description: 'Compact structured tote with pearl hardware.',
+    price: 129,
+  },
+  {
+    id: 2,
+    name: 'City Crossbody',
+    description: 'Everyday crossbody with soft vegan leather.',
+    price: 99,
+  },
+  {
+    id: 3,
+    name: 'Luna Shoulder Bag',
+    description: 'Classic shoulder silhouette with magnetic flap.',
+    price: 149,
+  },
+  {
+    id: 4,
+    name: 'Weekend Bucket',
+    description: 'Spacious bucket bag designed for travel days.',
+    price: 139,
+  },
+]
+
 function App() {
-  const [count, setCount] = useState(0)
+  const [cart, setCart] = useState({})
+
+  const addToCart = (id) => {
+    setCart((current) => ({ ...current, [id]: (current[id] ?? 0) + 1 }))
+  }
+
+  const removeFromCart = (id) => {
+    setCart((current) => {
+      const quantity = current[id] ?? 0
+      if (quantity <= 1) {
+        const next = { ...current }
+        delete next[id]
+        return next
+      }
+      return { ...current, [id]: quantity - 1 }
+    })
+  }
+
+  const cartItems = useMemo(
+    () => handbags.filter((bag) => (cart[bag.id] ?? 0) > 0),
+    [cart],
+  )
+
+  const subtotal = useMemo(
+    () => cartItems.reduce((sum, bag) => sum + bag.price * cart[bag.id], 0),
+    [cart, cartItems],
+  )
+
+  const shipping = subtotal > 0 ? 12 : 0
+  const total = subtotal + shipping
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
+    <main className="store">
+      <header className="store-header">
+        <p className="eyebrow">Pearl Bag Boutique</p>
+        <h1>Handbags for every day and every occasion</h1>
+        <p className="subtitle">
+          Discover bestselling handbags with simple checkout and fast delivery.
+        </p>
+      </header>
+
+      <section className="store-content" aria-label="Handbag catalog and cart">
+        <section className="catalog" aria-label="Handbag catalog">
+          {handbags.map((bag) => (
+            <article className="product-card" key={bag.id}>
+              <h2>{bag.name}</h2>
+              <p>{bag.description}</p>
+              <div className="product-footer">
+                <strong>${bag.price}</strong>
+                <button type="button" onClick={() => addToCart(bag.id)}>
+                  Add to cart
+                </button>
+              </div>
+            </article>
+          ))}
+        </section>
+
+        <aside className="cart" aria-label="Shopping cart">
+          <h2>Shopping cart</h2>
+          {cartItems.length === 0 ? (
+            <p>Your cart is empty.</p>
+          ) : (
+            <ul>
+              {cartItems.map((bag) => (
+                <li key={bag.id}>
+                  <div>
+                    <strong>{bag.name}</strong>
+                    <span>
+                      ${bag.price} × {cart[bag.id]}
+                    </span>
+                  </div>
+                  <button type="button" onClick={() => removeFromCart(bag.id)}>
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="summary">
+            <p>
+              <span>Subtotal</span>
+              <strong>${subtotal}</strong>
+            </p>
+            <p>
+              <span>Shipping</span>
+              <strong>${shipping}</strong>
+            </p>
+            <p className="total">
+              <span>Total</span>
+              <strong>${total}</strong>
+            </p>
+            <button type="button" disabled={cartItems.length === 0}>
+              Checkout
+            </button>
+          </div>
+        </aside>
       </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+    </main>
   )
 }
 
