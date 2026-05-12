@@ -24,7 +24,7 @@ const testimonials = [
   },
 ]
 
-function HomePage({ featuredBags, onAddToCart }) {
+function HomePage({ featuredBags, recentItems, onAddToCart, onToggleWishlist, wishlist }) {
   return (
     <div className="page home-page">
       <section className="hero">
@@ -136,7 +136,13 @@ function HomePage({ featuredBags, onAddToCart }) {
         </div>
         <div className="catalog">
           {featuredBags.map((bag) => (
-            <ProductCard bag={bag} key={bag.id} onAddToCart={onAddToCart} />
+            <ProductCard
+              bag={bag}
+              key={bag.id}
+              onAddToCart={onAddToCart}
+              onToggleWishlist={onToggleWishlist}
+              wishlist={wishlist}
+            />
           ))}
         </div>
       </section>
@@ -162,6 +168,28 @@ function HomePage({ featuredBags, onAddToCart }) {
         </div>
       </section>
 
+      {recentItems && recentItems.length > 0 && (
+        <section className="featured" aria-label="Recently viewed">
+          <div className="section-head">
+            <div>
+              <p className="eyebrow">Just for you</p>
+              <h2>Recently viewed</h2>
+            </div>
+          </div>
+          <div className="catalog">
+            {recentItems.slice(0, 4).map((bag) => (
+              <ProductCard
+                bag={bag}
+                key={bag.id}
+                onAddToCart={onAddToCart}
+                onToggleWishlist={onToggleWishlist}
+                wishlist={wishlist}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="testimonials" aria-label="Customer reviews">
         <p className="eyebrow center">What customers say</p>
         <h2 className="center">Loved by readers, travelers, and city-dwellers.</h2>
@@ -183,7 +211,7 @@ function HomePage({ featuredBags, onAddToCart }) {
         <div>
           <p className="eyebrow">The list</p>
           <h2>Be first to see new arrivals.</h2>
-          <p>Join the list for early access, restocks, and gentle inspiration.</p>
+          <p>Join the list for early access, restocks, and 10% off your first order.</p>
         </div>
         <form
           className="newsletter-form"

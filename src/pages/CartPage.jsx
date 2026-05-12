@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import BagIllustration from '../components/BagIllustration'
 import { FREE_SHIPPING_THRESHOLD, formatCurrency } from '../data/handbags'
@@ -10,10 +11,25 @@ function CartPage({
   onRemoveAll,
   shipping,
   subtotal,
+  tax,
   total,
+  promo,
+  promoDiscount,
+  onApplyPromo,
+  onClearPromo,
 }) {
+  const [code, setCode] = useState('')
+  const [error, setError] = useState('')
   const remainingForFreeShipping = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal)
   const progress = Math.min(100, (subtotal / FREE_SHIPPING_THRESHOLD) * 100)
+
+  const submitPromo = (event) => {
+    event.preventDefault()
+    setError('')
+    const result = onApplyPromo(code)
+    if (!result.ok) setError(result.message)
+    else setCode('')
+  }
 
   return (
     <div className="page cart-page">
@@ -35,9 +51,14 @@ function CartPage({
           </div>
           <h2>Your bag is empty</h2>
           <p>Discover modern handbags designed for everyday wear.</p>
-          <Link className="button primary" to="/shop">
-            Shop the collection
-          </Link>
+          <div className="empty-cart-actions">
+            <Link className="button primary" to="/shop">
+              Shop the collection
+            </Link>
+            <Link className="button ghost" to="/wishlist">
+              View wishlist
+            </Link>
+          </div>
         </section>
       ) : (
         <section className="cart-layout" aria-label="Cart items and order summary">
@@ -73,7 +94,10 @@ function CartPage({
                         <h3>
                           <Link to={`/shop/${bag.id}`}>{bag.name}</Link>
                         </h3>
-                        <p className="muted small">Color: {bag.colors[0].name}</p>
+                        <p className="muted small">Color: {bag.colors[0].name} · SKU: {bag.sku}</p>
+                        {bag.stock <= 3 && bag.stock > 0 && (
+                          <p className="warn small">Only {bag.stock} left in stock</p>
+                        )}
                       </div>
                       <button
                         type="button"
@@ -86,35 +110,67 @@ function CartPage({
                     </div>
                     <div className="cart-item-bottom">
                       <div className="qty-stepper small">
-                        <button type="button" onClick={() => onRemoveFromCart(bag.id)} aria-label="Decrease">
-                          −
-                        </button>
+                        <button type="button" onClick={() => onRemoveFromCart(bag.id)} aria-label="Decrease">−</button>
                         <span>{cart[bag.id]}</span>
-                        <button type="button" onClick={() => onAddToCart(bag.id)} aria-label="Increase">
-                          +
-                        </button>
+                        <button type="button" onClick={() => onAddToCart(bag.id)} aria-label="Increase">+</button>
                       </div>
-                      <strong>{formatCurrency(bag.price * cart[bag.id])}</strong>
+                      <div className="cart-item-price">
+                        <strong>{formatCurrency(bag.price * cart[bag.id])}</strong>
+                        <span className="muted small">{formatCurrency(bag.price)} each</span>
+                      </div>
                     </div>
                   </div>
                 </li>
               ))}
             </ul>
+
+            <div className="cart-actions-row">
+              <Link to="/shop" className="link-arrow">← Continue shopping</Link>
+            </div>
           </div>
 
           <aside className="summary" aria-label="Order summary">
             <h2>Order summary</h2>
+
+            <form className="promo-form" onSubmit={submitPromo}>
+              <label>
+                Promo code
+                <div className="promo-input">
+                  <input
+                    type="text"
+                    placeholder="WELCOME10"
+                    value={code}
+                    onChange={(e) => { setCode(e.target.value); setError('') }}
+                  />
+                  <button type="submit" className="button ghost">Apply</button>
+                </div>
+              </label>
+              {error && <p className="error small">{error}</p>}
+              {promo && (
+                <p className="promo-applied">
+                  ✓ <strong>{promo.code}</strong> · {promo.label}
+                  <button type="button" className="link-button" onClick={onClearPromo}>Remove</button>
+                </p>
+              )}
+            </form>
+
             <p>
               <span>Subtotal</span>
               <strong>{formatCurrency(subtotal)}</strong>
             </p>
+            {promoDiscount > 0 && (
+              <p className="discount-row">
+                <span>Discount</span>
+                <strong>−{formatCurrency(promoDiscount)}</strong>
+              </p>
+            )}
             <p>
               <span>Shipping</span>
               <strong>{shipping === 0 ? 'Free' : formatCurrency(shipping)}</strong>
             </p>
             <p>
               <span>Estimated tax</span>
-              <strong className="muted">Calculated at checkout</strong>
+              <strong>{formatCurrency(tax)}</strong>
             </p>
             <p className="total">
               <span>Total</span>

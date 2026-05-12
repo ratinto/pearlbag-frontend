@@ -1,5 +1,13 @@
 export const SHIPPING_COST = 12
 export const FREE_SHIPPING_THRESHOLD = 250
+export const TAX_RATE = 0.08
+
+export const PROMO_CODES = {
+  WELCOME10: { type: 'percent', value: 10, label: '10% off your order' },
+  PEARL20: { type: 'percent', value: 20, label: '20% off — new arrivals' },
+  FREESHIP: { type: 'shipping', value: 0, label: 'Free shipping' },
+  GIFT25: { type: 'fixed', value: 25, label: '$25 off orders over $150', min: 150 },
+}
 
 export const categories = [
   { id: 'tote', label: 'Totes' },
@@ -13,6 +21,7 @@ export const categories = [
 export const handbags = [
   {
     id: 1,
+    sku: 'PB-MT-001',
     name: 'Pearl Mini Tote',
     description:
       'A structured mini tote in pebbled vegan leather, finished with polished pearl hardware and a slim adjustable strap.',
@@ -23,6 +32,10 @@ export const handbags = [
     badge: 'Bestseller',
     rating: 4.8,
     reviews: 218,
+    stock: 12,
+    material: 'Pebbled vegan leather',
+    weight: '0.6 kg',
+    tags: ['everyday', 'work', 'bestseller'],
     colors: [
       { name: 'Ivory', hex: '#efe7d6' },
       { name: 'Sand', hex: '#cfb997' },
@@ -37,6 +50,7 @@ export const handbags = [
   },
   {
     id: 2,
+    sku: 'PB-CC-002',
     name: 'City Crossbody',
     description:
       'A modern everyday crossbody designed for life on the move. Smooth matte finish, magnetic closure, and a wide woven strap.',
@@ -46,6 +60,10 @@ export const handbags = [
     badge: 'New',
     rating: 4.7,
     reviews: 142,
+    stock: 3,
+    material: 'Matte vegan leather',
+    weight: '0.45 kg',
+    tags: ['new', 'travel', 'everyday'],
     colors: [
       { name: 'Cocoa', hex: '#6b4a32' },
       { name: 'Ink', hex: '#1f2733' },
@@ -60,6 +78,7 @@ export const handbags = [
   },
   {
     id: 3,
+    sku: 'PB-LS-003',
     name: 'Luna Shoulder Bag',
     description:
       'Classic crescent silhouette with a sculpted handle that rests neatly under the arm. Made for elevated everyday wear.',
@@ -68,6 +87,10 @@ export const handbags = [
     style: 'shoulder',
     rating: 4.9,
     reviews: 311,
+    stock: 8,
+    material: 'Smooth vegan leather',
+    weight: '0.5 kg',
+    tags: ['popular', 'evening'],
     colors: [
       { name: 'Champagne', hex: '#dac7a4' },
       { name: 'Slate', hex: '#5b6571' },
@@ -82,6 +105,7 @@ export const handbags = [
   },
   {
     id: 4,
+    sku: 'PB-WB-004',
     name: 'Weekend Bucket',
     description:
       'A roomy drawstring bucket bag for travel days and city escapes. Lightweight, soft-structured, and effortlessly chic.',
@@ -90,6 +114,10 @@ export const handbags = [
     style: 'bucket',
     rating: 4.6,
     reviews: 96,
+    stock: 15,
+    material: 'Pebbled vegan leather',
+    weight: '0.55 kg',
+    tags: ['travel', 'roomy'],
     colors: [
       { name: 'Camel', hex: '#b89070' },
       { name: 'Charcoal', hex: '#2c2c30' },
@@ -103,6 +131,7 @@ export const handbags = [
   },
   {
     id: 5,
+    sku: 'PB-AS-005',
     name: 'Aurora Satchel',
     description:
       'A polished satchel with crisp lines, a top zip, and gold-tone hardware. Equally at home in the boardroom or on a flight.',
@@ -113,6 +142,10 @@ export const handbags = [
     badge: 'Limited',
     rating: 4.9,
     reviews: 187,
+    stock: 2,
+    material: 'Saffiano-textured vegan leather',
+    weight: '0.85 kg',
+    tags: ['limited', 'work', 'professional'],
     colors: [
       { name: 'Espresso', hex: '#3b2a20' },
       { name: 'Ivory', hex: '#efe7d6' },
@@ -127,6 +160,7 @@ export const handbags = [
   },
   {
     id: 6,
+    sku: 'PB-EC-006',
     name: 'Evening Clutch',
     description:
       'A sculptural compact clutch with a subtle pearl clasp. Slim, hand-finished, and built for a memorable night out.',
@@ -135,6 +169,10 @@ export const handbags = [
     style: 'clutch',
     rating: 4.5,
     reviews: 73,
+    stock: 9,
+    material: 'Hand-finished vegan leather',
+    weight: '0.3 kg',
+    tags: ['evening', 'occasion'],
     colors: [
       { name: 'Pearl', hex: '#ece4d6' },
       { name: 'Noir', hex: '#0e0e10' },
@@ -149,6 +187,7 @@ export const handbags = [
   },
   {
     id: 7,
+    sku: 'PB-MH-007',
     name: 'Marlow Hobo',
     description:
       'A slouchy shoulder bag with a gathered top and a sumptuous suede-touch finish. Made to carry your day, gracefully.',
@@ -157,6 +196,10 @@ export const handbags = [
     style: 'shoulder',
     rating: 4.7,
     reviews: 124,
+    stock: 6,
+    material: 'Suede-touch microfiber',
+    weight: '0.5 kg',
+    tags: ['everyday', 'casual'],
     colors: [
       { name: 'Stone', hex: '#a89a86' },
       { name: 'Cognac', hex: '#8a4d2c' },
@@ -170,6 +213,7 @@ export const handbags = [
   },
   {
     id: 8,
+    sku: 'PB-AT-008',
     name: 'Atelier Top Handle',
     description:
       'A heritage-inspired top handle bag with crisp gusseted sides and a removable shoulder strap. Quiet confidence.',
@@ -179,6 +223,10 @@ export const handbags = [
     badge: 'New',
     rating: 4.8,
     reviews: 58,
+    stock: 4,
+    material: 'Smooth vegan leather',
+    weight: '0.8 kg',
+    tags: ['new', 'professional', 'heritage'],
     colors: [
       { name: 'Black', hex: '#101015' },
       { name: 'Bone', hex: '#e8dfce' },
@@ -193,6 +241,7 @@ export const handbags = [
   },
   {
     id: 9,
+    sku: 'PB-SP-009',
     name: 'Sora Pouch',
     description:
       'A minimal day pouch with a single contoured strap. Slim, light, and effortlessly modern.',
@@ -201,6 +250,10 @@ export const handbags = [
     style: 'crossbody',
     rating: 4.6,
     reviews: 211,
+    stock: 0,
+    material: 'Pebbled vegan leather',
+    weight: '0.3 kg',
+    tags: ['minimal', 'everyday'],
     colors: [
       { name: 'Sage', hex: '#a9b59a' },
       { name: 'Coal', hex: '#26272d' },
@@ -223,5 +276,28 @@ export const formatCurrency = (amount) =>
     maximumFractionDigits: 0,
   }).format(amount)
 
+export const formatCurrencyExact = (amount) =>
+  new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount)
+
 export const getBagById = (id) =>
   handbags.find((bag) => bag.id === Number(id))
+
+export const allColors = (() => {
+  const map = new Map()
+  handbags.forEach((bag) => {
+    bag.colors.forEach((c) => {
+      if (!map.has(c.name)) map.set(c.name, c)
+    })
+  })
+  return Array.from(map.values())
+})()
+
+export const priceRange = (() => {
+  const prices = handbags.map((b) => b.price)
+  return { min: Math.min(...prices), max: Math.max(...prices) }
+})()
