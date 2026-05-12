@@ -1,21 +1,57 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
 import Layout from './components/Layout'
-import { SHIPPING_COST, handbags } from './data/handbags'
+import { FREE_SHIPPING_THRESHOLD, SHIPPING_COST, handbags } from './data/handbags'
 import AboutPage from './pages/AboutPage'
 import CartPage from './pages/CartPage'
+import CheckoutPage from './pages/CheckoutPage'
 import HomePage from './pages/HomePage'
+import ProductPage from './pages/ProductPage'
 import ShopPage from './pages/ShopPage'
 
-function App() {
-  const [cart, setCart] = useState({})
+const STORAGE_KEY = 'pearlbag.cart'
 
-  const addToCart = (id) => {
-    setCart((current) => ({ ...current, [id]: (current[id] ?? 0) + 1 }))
+function loadCart() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
   }
+}
 
-  const removeFromCart = (id) => {
+function App() {
+  const [cart, setCart] = useState(loadCart)
+  const [toast, setToast] = useState(null)
+  const toastTimer = useRef(null)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cart))
+    } catch {
+      /* ignore persistence errors */
+    }
+  }, [cart])
+
+  const showToast = useCallback((message) => {
+    setToast(message)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 2200)
+  }, [])
+
+  const addToCart = useCallback(
+    (id) => {
+      setCart((current) => ({ ...current, [id]: (current[id] ?? 0) + 1 }))
+      const bag = handbags.find((b) => b.id === id)
+      if (bag) showToast(`${bag.name} added to your bag`)
+    },
+    [showToast],
+  )
+
+  const removeFromCart = useCallback((id) => {
     setCart((current) => {
       const quantity = current[id] ?? 0
       if (quantity <= 1) {
@@ -25,7 +61,17 @@ function App() {
       }
       return { ...current, [id]: quantity - 1 }
     })
-  }
+  }, [])
+
+  const removeAll = useCallback((id) => {
+    setCart((current) => {
+      const next = { ...current }
+      delete next[id]
+      return next
+    })
+  }, [])
+
+  const clearCart = useCallback(() => setCart({}), [])
 
   const cartItems = useMemo(
     () => handbags.filter((bag) => (cart[bag.id] ?? 0) > 0),
@@ -37,7 +83,8 @@ function App() {
     [cart, cartItems],
   )
 
-  const shipping = cartItems.length > 0 ? SHIPPING_COST : 0
+  const shipping =
+    cartItems.length === 0 || subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST
   const total = subtotal + shipping
 
   const cartCount = useMemo(
@@ -47,7 +94,7 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Layout cartCount={cartCount}>
+      <Layout cartCount={cartCount} toast={toast}>
         <Routes>
           <Route
             path="/"
@@ -63,6 +110,10 @@ function App() {
             element={<ShopPage handbags={handbags} onAddToCart={addToCart} />}
           />
           <Route
+            path="/shop/:id"
+            element={<ProductPage onAddToCart={addToCart} />}
+          />
+          <Route
             path="/cart"
             element={
               <CartPage
@@ -70,9 +121,23 @@ function App() {
                 cartItems={cartItems}
                 onAddToCart={addToCart}
                 onRemoveFromCart={removeFromCart}
+                onRemoveAll={removeAll}
                 shipping={shipping}
                 subtotal={subtotal}
                 total={total}
+              />
+            }
+          />
+          <Route
+            path="/checkout"
+            element={
+              <CheckoutPage
+                cart={cart}
+                cartItems={cartItems}
+                shipping={shipping}
+                subtotal={subtotal}
+                total={total}
+                onClearCart={clearCart}
               />
             }
           />
