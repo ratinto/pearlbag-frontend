@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { api } from '../lib/api'
 
 const FAQS = [
   {
@@ -31,8 +32,28 @@ const FAQS = [
   },
 ]
 
-function FaqPage() {
+function FaqPage({ onShowToast }) {
   const [open, setOpen] = useState(0)
+  const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' })
+  const [status, setStatus] = useState({ state: 'idle', message: '' })
+
+  const submitContact = async (event) => {
+    event.preventDefault()
+    setStatus({ state: 'pending', message: '' })
+    try {
+      await api.contact.send({
+        name: form.name.trim() || undefined,
+        email: form.email.trim(),
+        subject: form.subject.trim() || undefined,
+        message: form.message.trim(),
+      })
+      setForm({ name: '', email: '', subject: '', message: '' })
+      setStatus({ state: 'success', message: 'Thanks — we’ll be in touch within one business day.' })
+      onShowToast?.('Message sent')
+    } catch (err) {
+      setStatus({ state: 'error', message: err.message || 'Could not send message.' })
+    }
+  }
 
   return (
     <div className="page faq-page">
@@ -67,6 +88,53 @@ function FaqPage() {
           <li>care@pearlbag.com</li>
           <li>Mon–Fri · 9am–5pm ET</li>
         </ul>
+
+        <form className="contact-form" onSubmit={submitContact} aria-label="Contact us">
+          <div className="grid-2">
+            <label>
+              Name
+              <input
+                type="text"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              />
+            </label>
+            <label>
+              Email
+              <input
+                type="email"
+                required
+                value={form.email}
+                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              />
+            </label>
+          </div>
+          <label>
+            Subject
+            <input
+              type="text"
+              value={form.subject}
+              onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
+            />
+          </label>
+          <label>
+            Message
+            <textarea
+              rows={4}
+              required
+              value={form.message}
+              onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
+            />
+          </label>
+          {status.message && (
+            <p className={`small ${status.state === 'error' ? 'error' : 'muted'}`}>
+              {status.message}
+            </p>
+          )}
+          <button type="submit" className="button primary" disabled={status.state === 'pending'}>
+            {status.state === 'pending' ? 'Sending…' : 'Send message'}
+          </button>
+        </form>
       </section>
     </div>
   )

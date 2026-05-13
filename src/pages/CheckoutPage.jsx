@@ -1,13 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import BagIllustration from '../components/BagIllustration'
 import { formatCurrency } from '../data/handbags'
-
-function generateOrderNumber() {
-  const ts = Date.now().toString(36).toUpperCase().slice(-5)
-  const rand = Math.random().toString(36).toUpperCase().slice(2, 6)
-  return `PB-${ts}-${rand}`
-}
+import { api } from '../lib/api'
 
 function CheckoutPage({
   cartItems,
@@ -29,6 +24,11 @@ function CheckoutPage({
   const [email, setEmail] = useState('')
   const [promoInput, setPromoInput] = useState('')
   const [promoError, setPromoError] = useState('')
+  const [promoSubmitting, setPromoSubmitting] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [orderError, setOrderError] = useState('')
+  const detailsFormRef = useRef(null)
+  const detailsDataRef = useRef(null)
 
   const expressFee = 18
   const finalShipping = shippingMethod === 'express' ? shipping + expressFee : shipping
@@ -46,36 +46,82 @@ function CheckoutPage({
 
   if (cartItems.length === 0 && !placed) return <Navigate to="/cart" replace />
 
-  const submit = (event) => {
-    event.preventDefault()
-    if (step === 'details') {
-      setStep('payment')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    } else if (step === 'payment') {
-      const orderNumber = generateOrderNumber()
-      const items = orderItems.map(({ id, name, qty, line }) => ({ id, name, qty, line }))
-      setPlaced({
-        orderNumber,
-        email,
-        total: finalTotal,
-        items,
-        date: new Date().toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        }),
-      })
-      onClearCart()
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+  const collectShippingAddress = (form) => {
+    const data = new FormData(form)
+    return {
+      firstName: data.get('firstName')?.toString().trim() ?? '',
+      lastName: data.get('lastName')?.toString().trim() ?? '',
+      address: data.get('address')?.toString().trim() ?? '',
+      address2: data.get('address2')?.toString().trim() ?? '',
+      city: data.get('city')?.toString().trim() ?? '',
+      state: data.get('state')?.toString().trim() ?? '',
+      postalCode: data.get('postalCode')?.toString().trim() ?? '',
+      country: data.get('country')?.toString() ?? 'US',
+      phone: data.get('phone')?.toString().trim() ?? '',
     }
   }
 
-  const submitPromo = (event) => {
+  const submit = async (event) => {
+    event.preventDefault()
+    setOrderError('')
+    if (step === 'details') {
+      detailsDataRef.current = collectShippingAddress(event.currentTarget)
+      setStep('payment')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    if (step === 'payment') {
+      setSubmitting(true)
+      try {
+        const order = await api.orders.create({
+          email,
+          items: cartItems.map((bag) => ({
+            productId: bag.id,
+            quantity: cart[bag.id],
+            color: bag.colors?.[0]?.name,
+          })),
+          promoCode: promo?.code,
+          shippingMethod,
+          paymentMethod,
+          shippingAddress: detailsDataRef.current,
+        })
+        setPlaced({
+          orderNumber: order.orderNumber,
+          email: order.email,
+          total: Number(order.total),
+          items: order.items.map((i) => ({
+            id: i.productId,
+            name: i.productName,
+            qty: i.quantity,
+            line: Number(i.lineTotal),
+          })),
+          date: new Date(order.createdAt).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          }),
+        })
+        onClearCart()
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      } catch (err) {
+        setOrderError(err.message || 'Could not place order.')
+      } finally {
+        setSubmitting(false)
+      }
+    }
+  }
+
+  const submitPromo = async (event) => {
     event.preventDefault()
     setPromoError('')
-    const result = onApplyPromo(promoInput)
-    if (!result.ok) setPromoError(result.message)
-    else setPromoInput('')
+    setPromoSubmitting(true)
+    try {
+      const result = await onApplyPromo(promoInput)
+      if (!result.ok) setPromoError(result.message)
+      else setPromoInput('')
+    } finally {
+      setPromoSubmitting(false)
+    }
   }
 
   if (placed) {
@@ -134,7 +180,7 @@ function CheckoutPage({
       </header>
 
       <section className="checkout-layout">
-        <form className="checkout-form" onSubmit={submit}>
+        <form className="checkout-form" onSubmit={submit} ref={detailsFormRef}>
           {step === 'details' && (
             <>
               <fieldset>
@@ -143,6 +189,7 @@ function CheckoutPage({
                   Email
                   <input
                     type="email"
+                    name="email"
                     required
                     placeholder="you@example.com"
                     value={email}
@@ -150,7 +197,7 @@ function CheckoutPage({
                   />
                 </label>
                 <label className="checkbox-row">
-                  <input type="checkbox" defaultChecked />
+                  <input type="checkbox" name="emailOptIn" defaultChecked />
                   <span>Email me about new arrivals and offers</span>
                 </label>
               </fieldset>
@@ -160,38 +207,38 @@ function CheckoutPage({
                 <div className="grid-2">
                   <label>
                     First name
-                    <input type="text" required autoComplete="given-name" />
+                    <input type="text" name="firstName" required autoComplete="given-name" />
                   </label>
                   <label>
                     Last name
-                    <input type="text" required autoComplete="family-name" />
+                    <input type="text" name="lastName" required autoComplete="family-name" />
                   </label>
                 </div>
                 <label>
                   Address
-                  <input type="text" required autoComplete="street-address" />
+                  <input type="text" name="address" required autoComplete="street-address" />
                 </label>
                 <label>
                   Apartment, suite, etc. (optional)
-                  <input type="text" autoComplete="address-line2" />
+                  <input type="text" name="address2" autoComplete="address-line2" />
                 </label>
                 <div className="grid-3">
                   <label>
                     City
-                    <input type="text" required autoComplete="address-level2" />
+                    <input type="text" name="city" required autoComplete="address-level2" />
                   </label>
                   <label>
                     State / Region
-                    <input type="text" autoComplete="address-level1" />
+                    <input type="text" name="state" autoComplete="address-level1" />
                   </label>
                   <label>
                     Postal code
-                    <input type="text" required autoComplete="postal-code" />
+                    <input type="text" name="postalCode" required autoComplete="postal-code" />
                   </label>
                 </div>
                 <label>
                   Country
-                  <select defaultValue="US" autoComplete="country">
+                  <select name="country" defaultValue="US" autoComplete="country">
                     <option value="US">United States</option>
                     <option value="CA">Canada</option>
                     <option value="UK">United Kingdom</option>
@@ -203,7 +250,7 @@ function CheckoutPage({
                 </label>
                 <label>
                   Phone (optional)
-                  <input type="tel" autoComplete="tel" placeholder="For delivery updates" />
+                  <input type="tel" name="phone" autoComplete="tel" placeholder="For delivery updates" />
                 </label>
               </fieldset>
 
@@ -326,16 +373,19 @@ function CheckoutPage({
                 </label>
               </fieldset>
 
+              {orderError && <p className="error">{orderError}</p>}
+
               <div className="checkout-actions">
                 <button
                   type="button"
                   className="link-arrow"
                   onClick={() => setStep('details')}
+                  disabled={submitting}
                 >
                   ← Back to details
                 </button>
-                <button type="submit" className="button primary">
-                  Place order · {formatCurrency(finalTotal)}
+                <button type="submit" className="button primary" disabled={submitting}>
+                  {submitting ? 'Placing order…' : `Place order · ${formatCurrency(finalTotal)}`}
                 </button>
               </div>
             </>
@@ -372,7 +422,9 @@ function CheckoutPage({
                 value={promoInput}
                 onChange={(e) => { setPromoInput(e.target.value); setPromoError('') }}
               />
-              <button type="submit" className="button ghost">Apply</button>
+              <button type="submit" className="button ghost" disabled={promoSubmitting}>
+                {promoSubmitting ? '…' : 'Apply'}
+              </button>
             </div>
             {promoError && <p className="error small">{promoError}</p>}
             {promo && (

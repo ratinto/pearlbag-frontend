@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import BagIllustration from './BagIllustration'
 import { formatCurrency } from '../data/handbags'
+import { api } from '../lib/api'
 
 function Layout({
   children,
@@ -12,14 +13,33 @@ function Layout({
   subtotal,
   toast,
   onRemoveAll,
+  onShowToast,
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchValue, setSearchValue] = useState('')
+  const [footerEmail, setFooterEmail] = useState('')
+  const [footerStatus, setFooterStatus] = useState({ state: 'idle', message: '' })
   const searchInputRef = useRef(null)
   const location = useLocation()
   const navigate = useNavigate()
+
+  const submitFooterNewsletter = async (event) => {
+    event.preventDefault()
+    setFooterStatus({ state: 'pending', message: '' })
+    try {
+      await api.newsletter.subscribe(footerEmail)
+      setFooterEmail('')
+      setFooterStatus({ state: 'success', message: 'Subscribed.' })
+      onShowToast?.('Subscribed — welcome to the list')
+    } catch (err) {
+      setFooterStatus({
+        state: 'error',
+        message: err.message || 'Could not subscribe.',
+      })
+    }
+  }
 
   useEffect(() => {
     setDrawerOpen(false)
@@ -197,16 +217,24 @@ function Layout({
           <div>
             <h4>Newsletter</h4>
             <p className="footer-small">Early access, restocks, and the occasional note.</p>
-            <form
-              className="footer-newsletter"
-              onSubmit={(event) => {
-                event.preventDefault()
-                event.currentTarget.reset()
-              }}
-            >
-              <input type="email" required placeholder="your@email.com" aria-label="Email" />
-              <button type="submit">Join</button>
+            <form className="footer-newsletter" onSubmit={submitFooterNewsletter}>
+              <input
+                type="email"
+                required
+                placeholder="your@email.com"
+                aria-label="Email"
+                value={footerEmail}
+                onChange={(e) => setFooterEmail(e.target.value)}
+              />
+              <button type="submit" disabled={footerStatus.state === 'pending'}>
+                {footerStatus.state === 'pending' ? '…' : 'Join'}
+              </button>
             </form>
+            {footerStatus.message && (
+              <p className={`small ${footerStatus.state === 'error' ? 'error' : 'muted'}`}>
+                {footerStatus.message}
+              </p>
+            )}
           </div>
         </div>
 

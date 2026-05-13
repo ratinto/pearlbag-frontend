@@ -7,46 +7,67 @@ Boutique handbag ecommerce storefront. Aesthetic is **minimal, editorial, warm-n
 - **React 19** + **Vite 8**
 - **React Router 7** (data-router not used — plain `BrowserRouter` + `Routes`)
 - **Plain CSS** in `src/index.css` (tokens/typography) and `src/App.css` (everything else). No Tailwind, no CSS-in-JS.
-- **No TypeScript.** No state library — global state lives in `App.jsx` as React state + `localStorage`.
+- **No TypeScript.** No state library — server-fetched product state + UI state lives in `App.jsx` as React state, persisted slices go to `localStorage`.
 - **Fonts:** Cormorant Garamond (serif, headings) + Inter (sans, body), loaded via Google Fonts in `index.css`.
 
 ## Layout
 
 ```
 src/
-├── App.jsx                 # routes, cart/wishlist/recent/promo state, persistence
+├── App.jsx                 # routes, products fetch, cart/wishlist/recent/promo state, persistence
 ├── App.css                 # all component styles
 ├── index.css               # CSS variables, base typography, resets
 ├── main.jsx                # ReactDOM root
+├── lib/
+│   └── api.js              # fetch wrappers for the backend API
 ├── components/
-│   ├── Layout.jsx          # header (search, wishlist, cart drawer), footer, mobile menu
+│   ├── Layout.jsx          # header (search, wishlist, cart drawer), footer (newsletter), mobile menu
 │   ├── ProductCard.jsx     # grid card with wishlist heart + quick add
 │   └── BagIllustration.jsx # SVG bag silhouettes used everywhere as imagery
 ├── data/
-│   └── handbags.js         # product catalog + PROMO_CODES + helpers (formatCurrency, etc.)
+│   └── handbags.js         # pricing constants, categories, formatters, getAllColors/getPriceRange helpers
 └── pages/
     ├── HomePage.jsx        # hero, value row, categories, featured, story, reviews, newsletter
     ├── ShopPage.jsx        # filters (category/price/color/in-stock), search query, sort, grid/list
-    ├── ProductPage.jsx     # gallery, color/qty options, stock pill, accordion, reviews
-    ├── CartPage.jsx        # line items, promo code, free-shipping bar, summary
-    ├── CheckoutPage.jsx    # multi-step form, shipping/payment methods, order confirmation
+    ├── ProductPage.jsx     # fetches product + reviews, gallery, options, stock pill, review submission
+    ├── CartPage.jsx        # line items, promo code (async), free-shipping bar, summary
+    ├── CheckoutPage.jsx    # multi-step form, posts order to API, confirmation
     ├── WishlistPage.jsx    # saved items
     ├── AboutPage.jsx       # brand story
-    ├── FaqPage.jsx         # accordion FAQ + contact info
+    ├── FaqPage.jsx         # accordion FAQ + contact form
     └── NotFoundPage.jsx    # 404
 ```
 
+## Backend integration
+
+The sibling Express + Prisma + Supabase backend lives at `../pearlbag-backend`. The frontend reads it via `src/lib/api.js`, configured by `VITE_API_URL` (default `http://localhost:5000`). Copy `.env.example` → `.env` and set `VITE_API_URL` if the backend isn't on localhost.
+
+`api` shape (all methods return parsed JSON; errors throw with `.status` and `.data`):
+
+- `api.products.list(params?)` → product[]; `params` supports `category, q, minPrice, maxPrice, inStock, sort`
+- `api.products.get(id)` → product
+- `api.orders.create(payload)` → order
+- `api.orders.get(orderNumber)` → order
+- `api.promo.validate(code, subtotal)` → `{ ok, promo? }`
+- `api.reviews.list(productId)` → review[]
+- `api.reviews.create(payload)` → review
+- `api.newsletter.subscribe(email)` → subscriber
+- `api.contact.send(payload)` → message
+
+**Never add a parallel fetch layer or mock data.** If a feature needs new state, add a route to the backend and a method to `api`.
+
 ## State model (in App.jsx)
 
-All app state is hoisted into `App.jsx` and passed down as props:
+App.jsx fetches the product catalog once on mount, then derives `cartItems`, `wishlistItems`, `recentItems` from the fetched products + persisted ID lists.
 
+- `products` — fetched from `GET /api/products`. Until it loads, App shows a centered "Loading…" placeholder so cart/wishlist resolution can't see a stale empty array.
 - `cart` — `{ [bagId]: qty }`, persisted at `localStorage["pearlbag.cart"]`
 - `wishlist` — array of bag IDs, persisted at `localStorage["pearlbag.wishlist"]`
 - `recent` — last 8 viewed bag IDs (most recent first), persisted at `localStorage["pearlbag.recent"]`
-- `promo` — `{ code, type, value, label, min? } | null`, in-memory only (cleared on order placement)
-- `toast` — transient flash message, auto-clears after 2.2s
+- `promo` — server-validated promo object `{ code, type, value, label, minOrder, ... } | null`, in-memory only (cleared on order placement). `applyPromo(code)` is **async** — it calls `api.promo.validate()`. Cart/Checkout call sites must await it.
+- `toast` — transient flash message, auto-clears after 2.2s. Forwarded as `onShowToast` to pages that need it.
 
-Totals (`subtotal`, `promoDiscount`, `shipping`, `tax`, `total`) are derived with `useMemo`. Tax is `subtotal * TAX_RATE` (`0.08`). Free shipping over `$250` or with the `FREESHIP` promo.
+Totals (`subtotal`, `promoDiscount`, `shipping`, `tax`, `total`) are derived with `useMemo`. Tax is `subtotal * TAX_RATE` (`0.08`). Free shipping over `$250` or with a `shipping`-type promo. These are **display-only** — the backend recomputes totals server-side when the order is submitted.
 
 When adding state-derived UI (e.g. a coupon banner), derive from existing state — don't add parallel state.
 
@@ -64,18 +85,17 @@ When adding state-derived UI (e.g. a coupon banner), derive from existing state 
 | `/faq`         | FaqPage          |
 | `*`            | NotFoundPage     |
 
-`ShopPage` reads `?category=` and `?q=` from the URL. Treat query params as the source of truth for category and search; filter UI state (price slider, color, in-stock) is local component state.
+`ShopPage` reads `?category=` and `?q=` from the URL. Treat query params as the source of truth for category and search; filter UI state (price slider, color, in-stock) is local component state. `allColors` and `priceRange` are derived from the fetched `products` via `getAllColors(products)` / `getPriceRange(products)` in `data/handbags.js`.
 
-## Promo codes
+## Forms
 
-Defined in `src/data/handbags.js` under `PROMO_CODES`:
+All write endpoints are wired:
 
-- `WELCOME10` — 10% off
-- `PEARL20` — 20% off
-- `FREESHIP` — free shipping
-- `GIFT25` — $25 off orders over $150
-
-`applyPromo(code)` in App.jsx returns `{ ok, message }`.
+- **Newsletter** (HomePage + Layout footer) → `api.newsletter.subscribe`
+- **Promo validation** (CartPage + CheckoutPage) → `api.promo.validate` via `applyPromo`
+- **Reviews** (ProductPage) → `api.reviews.create` — page also fetches `api.reviews.list` and refetches the product after submission so rating/reviewCount stay fresh
+- **Order placement** (CheckoutPage) → `api.orders.create` — step 1 captures the shipping address via `FormData`, step 2 submits. Server returns the canonical order; the confirmation card uses `order.orderNumber`, `order.total`, `order.createdAt`
+- **Contact** (FaqPage) → `api.contact.send`
 
 ## Imagery
 
@@ -100,11 +120,8 @@ Headings use `--serif`; body and UI use `--sans`. Italic serif (`.italic`) is th
 - **No third-party logos / press mentions.** No "Visa / Mastercard / Apple Pay" badge rows, no "As seen in Vogue".
 - **One badge per product card max.** Don't stack `New + Sale + Low stock`.
 - **`formatCurrency(amount)`** for all prices (whole-dollar). Use `formatCurrencyExact` only when cents are needed.
-- **Toast on add-to-cart / wishlist toggle** — already wired in App.jsx; reuse `showToast`.
+- **Toast on add-to-cart / wishlist toggle** — already wired in App.jsx; reuse `showToast`/`onShowToast`.
 - **Persist to `localStorage`** with the existing `pearlbag.*` key naming if you add new persisted state.
 - **Layout is sticky on cart drawer / mobile menu**; both toggle `body.overflow` to lock scroll.
 - **Build:** `npm run build`. **Dev:** `npm run dev`. **Lint:** `npm run lint`.
-
-## Backend
-
-A sibling Express server lives at `../pearlbag-backend`. The frontend does **not** currently call it — all data and order flow is local. If you wire real APIs, start there; do not pollute the frontend with mock fetch layers in the meantime.
+- **Backend field naming:** server uses `reviewCount` (not `reviews`); the API client already returns Decimal/BigInt as `Number`/`String`, so `bag.price * qty` is safe.

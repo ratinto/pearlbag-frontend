@@ -1,60 +1,137 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, Navigate } from 'react-router-dom'
 import BagIllustration from '../components/BagIllustration'
 import ProductCard from '../components/ProductCard'
-import { formatCurrency, getBagById, handbags } from '../data/handbags'
+import { formatCurrency } from '../data/handbags'
+import { api } from '../lib/api'
 
-const SAMPLE_REVIEWS = [
-  {
-    rating: 5,
-    title: 'Beautiful everyday bag',
-    body:
-      'This is the bag I reach for every morning. The hardware feels considered and it sits perfectly under the arm.',
-    name: 'Amelia R.',
-    date: '2 weeks ago',
-  },
-  {
-    rating: 5,
-    title: 'Better than expected',
-    body:
-      'Quality I would expect at twice the price. The leather looks even better in person.',
-    name: 'Priya K.',
-    date: '1 month ago',
-  },
-  {
-    rating: 4,
-    title: 'Lovely, slightly smaller than I thought',
-    body:
-      'Beautifully made. Just check the dimensions — it is more of a mini than I anticipated.',
-    name: 'Hana T.',
-    date: '2 months ago',
-  },
-]
+function timeAgo(iso) {
+  const date = new Date(iso)
+  const diff = (Date.now() - date.getTime()) / 1000
+  if (diff < 60) return 'just now'
+  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`
+  if (diff < 2592000) return `${Math.floor(diff / 86400)} days ago`
+  if (diff < 31536000) return `${Math.floor(diff / 2592000)} months ago`
+  return `${Math.floor(diff / 31536000)} years ago`
+}
 
-function ProductPage({ onAddToCart, onToggleWishlist, onTrackView, wishlist, recentItems }) {
+function ProductPage({
+  onAddToCart,
+  onToggleWishlist,
+  onTrackView,
+  wishlist,
+  recentItems,
+  products,
+  onShowToast,
+}) {
   const { id } = useParams()
-  const bag = getBagById(id)
+  const [bag, setBag] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [notFound, setNotFound] = useState(false)
   const [colorIndex, setColorIndex] = useState(0)
   const [qty, setQty] = useState(1)
 
+  const [reviews, setReviews] = useState([])
+  const [reviewsLoading, setReviewsLoading] = useState(false)
+  const [reviewForm, setReviewForm] = useState({ authorName: '', rating: 5, title: '', body: '' })
+  const [reviewSubmitting, setReviewSubmitting] = useState(false)
+  const [reviewError, setReviewError] = useState('')
+
   useEffect(() => {
-    if (bag && onTrackView) onTrackView(bag.id)
-    window.scrollTo({ top: 0 })
+    let cancelled = false
+    setLoading(true)
+    setNotFound(false)
     setColorIndex(0)
     setQty(1)
-  }, [id, bag, onTrackView])
+    window.scrollTo({ top: 0 })
 
-  if (!bag) return <Navigate to="/shop" replace />
+    api.products
+      .get(id)
+      .then((p) => {
+        if (cancelled) return
+        setBag(p)
+        if (onTrackView) onTrackView(p.id)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        if (err.status === 404) setNotFound(true)
+        else setNotFound(true)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
 
-  const color = bag.colors[colorIndex]
-  const recommended = handbags
-    .filter((b) => b.id !== bag.id && b.category === bag.category)
-    .concat(handbags.filter((b) => b.id !== bag.id && b.category !== bag.category))
-    .slice(0, 3)
+    setReviewsLoading(true)
+    api.reviews
+      .list(id)
+      .then((list) => {
+        if (!cancelled) setReviews(list)
+      })
+      .catch(() => {
+        if (!cancelled) setReviews([])
+      })
+      .finally(() => {
+        if (!cancelled) setReviewsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [id, onTrackView])
+
+  const recommended = useMemo(() => {
+    if (!bag || !products) return []
+    return products
+      .filter((b) => b.id !== bag.id && b.category === bag.category)
+      .concat(products.filter((b) => b.id !== bag.id && b.category !== bag.category))
+      .slice(0, 3)
+  }, [bag, products])
+
+  const submitReview = async (event) => {
+    event.preventDefault()
+    setReviewError('')
+    if (!reviewForm.authorName.trim()) {
+      setReviewError('Please enter your name.')
+      return
+    }
+    setReviewSubmitting(true)
+    try {
+      const created = await api.reviews.create({
+        productId: bag.id,
+        authorName: reviewForm.authorName.trim(),
+        rating: Number(reviewForm.rating),
+        title: reviewForm.title.trim() || undefined,
+        body: reviewForm.body.trim() || undefined,
+      })
+      setReviews((prev) => [created, ...prev])
+      setReviewForm({ authorName: '', rating: 5, title: '', body: '' })
+      onShowToast?.('Thanks for your review')
+      // Refetch product so updated rating / reviewCount reflect.
+      api.products.get(bag.id).then(setBag).catch(() => {})
+    } catch (err) {
+      setReviewError(err.message || 'Could not submit review.')
+    } finally {
+      setReviewSubmitting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="page product-page" style={{ padding: '4rem 1.5rem', textAlign: 'center' }}>
+        <p className="muted">Loading…</p>
+      </div>
+    )
+  }
+  if (notFound || !bag) return <Navigate to="/shop" replace />
+
+  const color = bag.colors[colorIndex] || bag.colors[0]
   const isSaved = wishlist?.includes(bag.id)
   const outOfStock = bag.stock === 0
   const lowStock = bag.stock > 0 && bag.stock <= 3
   const recentlyViewed = (recentItems || []).filter((b) => b.id !== bag.id).slice(0, 4)
+  const reviewCount = bag.reviewCount ?? reviews.length
+  const rating = Number(bag.rating || 0)
 
   return (
     <div className="page product-page">
@@ -108,7 +185,7 @@ function ProductPage({ onAddToCart, onToggleWishlist, onTrackView, wishlist, rec
               )}
             </div>
             <a href="#reviews" className="product-rating">
-              ★ {bag.rating.toFixed(1)} <span className="muted">({bag.reviews})</span>
+              ★ {rating.toFixed(1)} <span className="muted">({reviewCount})</span>
             </a>
           </div>
 
@@ -182,7 +259,7 @@ function ProductPage({ onAddToCart, onToggleWishlist, onTrackView, wishlist, rec
           </div>
 
           <ul className="product-details">
-            {bag.details.map((d) => (
+            {bag.details?.map((d) => (
               <li key={d}>{d}</li>
             ))}
           </ul>
@@ -212,38 +289,96 @@ function ProductPage({ onAddToCart, onToggleWishlist, onTrackView, wishlist, rec
         <div className="section-head">
           <div>
             <p className="eyebrow">Customer reviews</p>
-            <h2>{bag.rating.toFixed(1)} out of 5 · {bag.reviews} reviews</h2>
+            <h2>{rating.toFixed(1)} out of 5 · {reviewCount} reviews</h2>
           </div>
         </div>
+
+        <form className="review-form" onSubmit={submitReview} aria-label="Write a review">
+          <div className="grid-2">
+            <label>
+              Your name
+              <input
+                type="text"
+                required
+                value={reviewForm.authorName}
+                onChange={(e) => setReviewForm((f) => ({ ...f, authorName: e.target.value }))}
+              />
+            </label>
+            <label>
+              Rating
+              <select
+                value={reviewForm.rating}
+                onChange={(e) => setReviewForm((f) => ({ ...f, rating: e.target.value }))}
+              >
+                {[5, 4, 3, 2, 1].map((n) => (
+                  <option key={n} value={n}>{n} star{n === 1 ? '' : 's'}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <label>
+            Title (optional)
+            <input
+              type="text"
+              value={reviewForm.title}
+              onChange={(e) => setReviewForm((f) => ({ ...f, title: e.target.value }))}
+            />
+          </label>
+          <label>
+            Your review (optional)
+            <textarea
+              rows={3}
+              value={reviewForm.body}
+              onChange={(e) => setReviewForm((f) => ({ ...f, body: e.target.value }))}
+            />
+          </label>
+          {reviewError && <p className="error small">{reviewError}</p>}
+          <button type="submit" className="button primary" disabled={reviewSubmitting}>
+            {reviewSubmitting ? 'Submitting…' : 'Submit review'}
+          </button>
+        </form>
+
         <div className="review-list">
-          {SAMPLE_REVIEWS.map((r) => (
-            <article className="review" key={r.title}>
-              <div className="stars" aria-hidden="true">{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</div>
-              <h4>{r.title}</h4>
-              <p>{r.body}</p>
-              <footer className="muted small">{r.name} · {r.date}</footer>
+          {reviewsLoading && reviews.length === 0 && (
+            <p className="muted small">Loading reviews…</p>
+          )}
+          {!reviewsLoading && reviews.length === 0 && (
+            <p className="muted small">No reviews yet. Be the first.</p>
+          )}
+          {reviews.map((r) => (
+            <article className="review" key={r.id}>
+              <div className="stars" aria-hidden="true">
+                {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
+              </div>
+              {r.title && <h4>{r.title}</h4>}
+              {r.body && <p>{r.body}</p>}
+              <footer className="muted small">
+                {r.authorName} · {timeAgo(r.createdAt)}
+              </footer>
             </article>
           ))}
         </div>
       </section>
 
-      <section className="recommendations">
-        <div className="section-head">
-          <h2>You may also like</h2>
-          <Link to="/shop" className="link-arrow">View all →</Link>
-        </div>
-        <div className="catalog">
-          {recommended.map((b) => (
-            <ProductCard
-              bag={b}
-              key={b.id}
-              onAddToCart={onAddToCart}
-              onToggleWishlist={onToggleWishlist}
-              wishlist={wishlist}
-            />
-          ))}
-        </div>
-      </section>
+      {recommended.length > 0 && (
+        <section className="recommendations">
+          <div className="section-head">
+            <h2>You may also like</h2>
+            <Link to="/shop" className="link-arrow">View all →</Link>
+          </div>
+          <div className="catalog">
+            {recommended.map((b) => (
+              <ProductCard
+                bag={b}
+                key={b.id}
+                onAddToCart={onAddToCart}
+                onToggleWishlist={onToggleWishlist}
+                wishlist={wishlist}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {recentlyViewed.length > 0 && (
         <section className="recommendations">

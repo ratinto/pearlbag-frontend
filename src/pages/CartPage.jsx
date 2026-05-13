@@ -20,15 +20,21 @@ function CartPage({
 }) {
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
   const remainingForFreeShipping = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal)
   const progress = Math.min(100, (subtotal / FREE_SHIPPING_THRESHOLD) * 100)
 
-  const submitPromo = (event) => {
+  const submitPromo = async (event) => {
     event.preventDefault()
     setError('')
-    const result = onApplyPromo(code)
-    if (!result.ok) setError(result.message)
-    else setCode('')
+    setSubmitting(true)
+    try {
+      const result = await onApplyPromo(code)
+      if (!result.ok) setError(result.message)
+      else setCode('')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -142,7 +148,9 @@ function CartPage({
                     value={code}
                     onChange={(e) => { setCode(e.target.value); setError('') }}
                   />
-                  <button type="submit" className="button ghost">Apply</button>
+                  <button type="submit" className="button ghost" disabled={submitting}>
+                    {submitting ? '…' : 'Apply'}
+                  </button>
                 </div>
               </label>
               {error && <p className="error small">{error}</p>}

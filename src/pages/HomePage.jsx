@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import BagIllustration from '../components/BagIllustration'
 import ProductCard from '../components/ProductCard'
 import { categories } from '../data/handbags'
+import { api } from '../lib/api'
 
 const testimonials = [
   {
@@ -24,7 +26,26 @@ const testimonials = [
   },
 ]
 
-function HomePage({ featuredBags, recentItems, onAddToCart, onToggleWishlist, wishlist }) {
+function HomePage({ featuredBags, recentItems, onAddToCart, onToggleWishlist, wishlist, onShowToast }) {
+  const [newsletterEmail, setNewsletterEmail] = useState('')
+  const [newsletterStatus, setNewsletterStatus] = useState({ state: 'idle', message: '' })
+
+  const submitNewsletter = async (event) => {
+    event.preventDefault()
+    setNewsletterStatus({ state: 'pending', message: '' })
+    try {
+      await api.newsletter.subscribe(newsletterEmail)
+      setNewsletterEmail('')
+      setNewsletterStatus({ state: 'success', message: 'You’re on the list.' })
+      onShowToast?.('Subscribed — welcome to the list')
+    } catch (err) {
+      setNewsletterStatus({
+        state: 'error',
+        message: err.message || 'Could not subscribe. Try again.',
+      })
+    }
+  }
+
   return (
     <div className="page home-page">
       <section className="hero">
@@ -213,15 +234,23 @@ function HomePage({ featuredBags, recentItems, onAddToCart, onToggleWishlist, wi
           <h2>Be first to see new arrivals.</h2>
           <p>Join the list for early access, restocks, and 10% off your first order.</p>
         </div>
-        <form
-          className="newsletter-form"
-          onSubmit={(event) => {
-            event.preventDefault()
-            event.currentTarget.reset()
-          }}
-        >
-          <input type="email" required placeholder="your@email.com" aria-label="Email address" />
-          <button type="submit" className="button primary">Subscribe</button>
+        <form className="newsletter-form" onSubmit={submitNewsletter}>
+          <input
+            type="email"
+            required
+            placeholder="your@email.com"
+            aria-label="Email address"
+            value={newsletterEmail}
+            onChange={(e) => setNewsletterEmail(e.target.value)}
+          />
+          <button type="submit" className="button primary" disabled={newsletterStatus.state === 'pending'}>
+            {newsletterStatus.state === 'pending' ? 'Subscribing…' : 'Subscribe'}
+          </button>
+          {newsletterStatus.message && (
+            <p className={`small ${newsletterStatus.state === 'error' ? 'error' : 'muted'}`}>
+              {newsletterStatus.message}
+            </p>
+          )}
         </form>
       </section>
     </div>

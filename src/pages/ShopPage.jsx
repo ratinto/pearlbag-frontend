@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import ProductCard from '../components/ProductCard'
-import { allColors, categories, priceRange } from '../data/handbags'
+import { categories, getAllColors, getPriceRange } from '../data/handbags'
 
 const SORTS = [
   { value: 'featured', label: 'Featured' },
@@ -15,6 +15,8 @@ function ShopPage({ handbags, onAddToCart, onToggleWishlist, wishlist }) {
   const [params, setParams] = useSearchParams()
   const activeCategory = params.get('category') ?? 'all'
   const query = params.get('q') ?? ''
+  const allColors = useMemo(() => getAllColors(handbags), [handbags])
+  const priceRange = useMemo(() => getPriceRange(handbags), [handbags])
   const [sort, setSort] = useState('featured')
   const [maxPrice, setMaxPrice] = useState(priceRange.max)
   const [colorFilter, setColorFilter] = useState('all')
@@ -26,7 +28,7 @@ function ShopPage({ handbags, onAddToCart, onToggleWishlist, wishlist }) {
     setMaxPrice(priceRange.max)
     setColorFilter('all')
     setOnlyInStock(false)
-  }, [activeCategory])
+  }, [activeCategory, priceRange.max])
 
   const setCategory = (cat) => {
     const next = new URLSearchParams(params)

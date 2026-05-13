@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import './App.css'
 import Layout from './components/Layout'
 import {
   FREE_SHIPPING_THRESHOLD,
-  PROMO_CODES,
   SHIPPING_COST,
   TAX_RATE,
-  handbags,
 } from './data/handbags'
+import { api } from './lib/api'
 import AboutPage from './pages/AboutPage'
 import CartPage from './pages/CartPage'
 import CheckoutPage from './pages/CheckoutPage'
@@ -35,6 +34,10 @@ function loadJson(key, fallback) {
 }
 
 function App() {
+  const [products, setProducts] = useState([])
+  const [productsLoading, setProductsLoading] = useState(true)
+  const [productsError, setProductsError] = useState(null)
+
   const [cart, setCart] = useState(() => {
     const v = loadJson(STORAGE_KEY, {})
     return v && typeof v === 'object' && !Array.isArray(v) ? v : {}
@@ -50,6 +53,28 @@ function App() {
   const [promo, setPromo] = useState(null)
   const [toast, setToast] = useState(null)
   const toastTimer = useRef(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setProductsLoading(true)
+    api.products
+      .list()
+      .then((list) => {
+        if (cancelled) return
+        setProducts(list)
+        setProductsError(null)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setProductsError(err.message || 'Failed to load products')
+      })
+      .finally(() => {
+        if (!cancelled) setProductsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     try {
@@ -84,10 +109,10 @@ function App() {
   const addToCart = useCallback(
     (id) => {
       setCart((current) => ({ ...current, [id]: (current[id] ?? 0) + 1 }))
-      const bag = handbags.find((b) => b.id === id)
+      const bag = products.find((b) => b.id === id)
       if (bag) showToast(`${bag.name} added to your bag`)
     },
-    [showToast],
+    [products, showToast],
   )
 
   const removeFromCart = useCallback((id) => {
@@ -118,17 +143,16 @@ function App() {
   const toggleWishlist = useCallback(
     (id) => {
       setWishlist((current) => {
+        const bag = products.find((b) => b.id === id)
         if (current.includes(id)) {
-          const bag = handbags.find((b) => b.id === id)
           if (bag) showToast(`${bag.name} removed from wishlist`)
           return current.filter((x) => x !== id)
         }
-        const bag = handbags.find((b) => b.id === id)
         if (bag) showToast(`${bag.name} saved to wishlist`)
         return [...current, id]
       })
     },
-    [showToast],
+    [products, showToast],
   )
 
   const trackView = useCallback((id) => {
@@ -138,52 +162,59 @@ function App() {
     })
   }, [])
 
-  const applyPromo = useCallback(
-    (code) => {
-      const key = String(code || '').trim().toUpperCase()
-      if (!key) return { ok: false, message: 'Enter a promo code.' }
-      const found = PROMO_CODES[key]
-      if (!found) return { ok: false, message: 'That code is not valid.' }
-      setPromo({ code: key, ...found })
-      showToast(`Promo applied: ${found.label}`)
-      return { ok: true, message: found.label }
-    },
-    [showToast],
-  )
-
-  const clearPromo = useCallback(() => setPromo(null), [])
-
   const cartItems = useMemo(
-    () => handbags.filter((bag) => (cart[bag.id] ?? 0) > 0),
-    [cart],
+    () => products.filter((bag) => (cart[bag.id] ?? 0) > 0),
+    [cart, products],
   )
 
   const wishlistItems = useMemo(
-    () => handbags.filter((bag) => wishlist.includes(bag.id)),
-    [wishlist],
+    () => products.filter((bag) => wishlist.includes(bag.id)),
+    [wishlist, products],
   )
 
   const recentItems = useMemo(
     () =>
       recent
-        .map((id) => handbags.find((b) => b.id === id))
+        .map((id) => products.find((b) => b.id === id))
         .filter(Boolean),
-    [recent],
+    [recent, products],
   )
 
   const subtotal = useMemo(
-    () => cartItems.reduce((sum, bag) => sum + bag.price * cart[bag.id], 0),
+    () => cartItems.reduce((sum, bag) => sum + Number(bag.price) * cart[bag.id], 0),
     [cart, cartItems],
   )
 
+  const applyPromo = useCallback(
+    async (code) => {
+      const key = String(code || '').trim().toUpperCase()
+      if (!key) return { ok: false, message: 'Enter a promo code.' }
+      try {
+        const res = await api.promo.validate(key, subtotal)
+        if (!res.ok || !res.promo) {
+          return { ok: false, message: res.message || 'That code is not valid.' }
+        }
+        setPromo({ ...res.promo, code: res.promo.code })
+        showToast(`Promo applied: ${res.promo.label}`)
+        return { ok: true, message: res.promo.label }
+      } catch (err) {
+        return { ok: false, message: err.message || 'Could not validate code.' }
+      }
+    },
+    [subtotal, showToast],
+  )
+
+  const clearPromo = useCallback(() => setPromo(null), [])
+
   const promoDiscount = useMemo(() => {
     if (!promo || subtotal === 0) return 0
+    const minOrder = Number(promo.minOrder ?? 0)
+    if (minOrder > 0 && subtotal < minOrder) return 0
     if (promo.type === 'percent') {
-      return Math.round((subtotal * promo.value) / 100)
+      return Math.round((subtotal * Number(promo.value)) / 100)
     }
     if (promo.type === 'fixed') {
-      if (promo.min && subtotal < promo.min) return 0
-      return Math.min(promo.value, subtotal)
+      return Math.min(Number(promo.value), subtotal)
     }
     return 0
   }, [promo, subtotal])
@@ -204,6 +235,8 @@ function App() {
     [cart],
   )
 
+  const featuredBags = useMemo(() => products.slice(0, 4), [products])
+
   return (
     <BrowserRouter>
       <Layout
@@ -214,96 +247,114 @@ function App() {
         subtotal={subtotal}
         toast={toast}
         onRemoveAll={removeAll}
+        onShowToast={showToast}
       >
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <HomePage
-                featuredBags={handbags.slice(0, 4)}
-                recentItems={recentItems}
-                onAddToCart={addToCart}
-                onToggleWishlist={toggleWishlist}
-                wishlist={wishlist}
-              />
-            }
-          />
-          <Route
-            path="/shop"
-            element={
-              <ShopPage
-                handbags={handbags}
-                onAddToCart={addToCart}
-                onToggleWishlist={toggleWishlist}
-                wishlist={wishlist}
-              />
-            }
-          />
-          <Route
-            path="/shop/:id"
-            element={
-              <ProductPage
-                onAddToCart={addToCart}
-                onToggleWishlist={toggleWishlist}
-                onTrackView={trackView}
-                wishlist={wishlist}
-                recentItems={recentItems}
-              />
-            }
-          />
-          <Route
-            path="/wishlist"
-            element={
-              <WishlistPage
-                items={wishlistItems}
-                onAddToCart={addToCart}
-                onToggleWishlist={toggleWishlist}
-                wishlist={wishlist}
-              />
-            }
-          />
-          <Route
-            path="/cart"
-            element={
-              <CartPage
-                cart={cart}
-                cartItems={cartItems}
-                onAddToCart={addToCart}
-                onRemoveFromCart={removeFromCart}
-                onRemoveAll={removeAll}
-                shipping={shipping}
-                subtotal={subtotal}
-                tax={tax}
-                total={total}
-                promo={promo}
-                promoDiscount={promoDiscount}
-                onApplyPromo={applyPromo}
-                onClearPromo={clearPromo}
-              />
-            }
-          />
-          <Route
-            path="/checkout"
-            element={
-              <CheckoutPage
-                cart={cart}
-                cartItems={cartItems}
-                shipping={shipping}
-                subtotal={subtotal}
-                tax={tax}
-                total={total}
-                promo={promo}
-                promoDiscount={promoDiscount}
-                onApplyPromo={applyPromo}
-                onClearPromo={clearPromo}
-                onClearCart={clearCart}
-              />
-            }
-          />
-          <Route path="/about" element={<AboutPage />} />
-          <Route path="/faq" element={<FaqPage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+        {productsError ? (
+          <div className="page" style={{ padding: '4rem 1.5rem', textAlign: 'center' }}>
+            <h2>We couldn't load the collection</h2>
+            <p className="muted">{productsError}</p>
+            <p className="muted small">
+              Make sure the backend is running at <code>{import.meta.env.VITE_API_URL || 'http://localhost:5000'}</code>.
+            </p>
+          </div>
+        ) : productsLoading && products.length === 0 ? (
+          <div className="page" style={{ padding: '4rem 1.5rem', textAlign: 'center' }}>
+            <p className="muted">Loading…</p>
+          </div>
+        ) : (
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <HomePage
+                  featuredBags={featuredBags}
+                  recentItems={recentItems}
+                  onAddToCart={addToCart}
+                  onToggleWishlist={toggleWishlist}
+                  wishlist={wishlist}
+                  onShowToast={showToast}
+                />
+              }
+            />
+            <Route
+              path="/shop"
+              element={
+                <ShopPage
+                  handbags={products}
+                  onAddToCart={addToCart}
+                  onToggleWishlist={toggleWishlist}
+                  wishlist={wishlist}
+                />
+              }
+            />
+            <Route
+              path="/shop/:id"
+              element={
+                <ProductPage
+                  onAddToCart={addToCart}
+                  onToggleWishlist={toggleWishlist}
+                  onTrackView={trackView}
+                  wishlist={wishlist}
+                  recentItems={recentItems}
+                  products={products}
+                  onShowToast={showToast}
+                />
+              }
+            />
+            <Route
+              path="/wishlist"
+              element={
+                <WishlistPage
+                  items={wishlistItems}
+                  onAddToCart={addToCart}
+                  onToggleWishlist={toggleWishlist}
+                  wishlist={wishlist}
+                />
+              }
+            />
+            <Route
+              path="/cart"
+              element={
+                <CartPage
+                  cart={cart}
+                  cartItems={cartItems}
+                  onAddToCart={addToCart}
+                  onRemoveFromCart={removeFromCart}
+                  onRemoveAll={removeAll}
+                  shipping={shipping}
+                  subtotal={subtotal}
+                  tax={tax}
+                  total={total}
+                  promo={promo}
+                  promoDiscount={promoDiscount}
+                  onApplyPromo={applyPromo}
+                  onClearPromo={clearPromo}
+                />
+              }
+            />
+            <Route
+              path="/checkout"
+              element={
+                <CheckoutPage
+                  cart={cart}
+                  cartItems={cartItems}
+                  shipping={shipping}
+                  subtotal={subtotal}
+                  tax={tax}
+                  total={total}
+                  promo={promo}
+                  promoDiscount={promoDiscount}
+                  onApplyPromo={applyPromo}
+                  onClearPromo={clearPromo}
+                  onClearCart={clearCart}
+                />
+              }
+            />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/faq" element={<FaqPage onShowToast={showToast} />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        )}
       </Layout>
     </BrowserRouter>
   )
